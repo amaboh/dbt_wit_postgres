@@ -1,0 +1,71 @@
+version: "3"
+
+services:
+  source_postgres:
+    image: postgres:14.11
+    ports:
+      - "5433:5432"
+    networks:
+      - elt_network
+    environment:
+      POSTGRES_DB: source_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - ./source_db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  destination_postgres:
+    image: postgres:latest
+    ports:
+      - "5434:5432"
+    networks:
+      - elt_network
+    depends_on:
+      - source_postgres
+    environment:
+      POSTGRES_DB: destination_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    # volumes:
+    #   - destination_db_data:/var/lib/postgresql/data
+
+  elt_script:
+    build:
+      context: ./elt-script # Directory containing the Dockerfile and elt_script.py
+      dockerfile: Dockerfile # Name of the Dockerfile, if it's something other than "Dockerfile", specify here
+    command: ["python", "elt_script.py"]
+    networks:
+      - elt_network
+    depends_on:
+      - destination_postgres
+    environment:
+      PG_DUMP_PATH: /usr/bin/pg_dump
+
+  dbt:
+    image: ghcr.io/dbt-labs/dbt-postgres:1.4.7
+    command:
+      [
+        "run",
+        "--profiles-dir",
+        "/root",
+        "--project-dir",
+        "/dbt",
+        "--full-refresh",
+      ]
+    networks:
+      - elt_network
+    volumes:
+      - ./custom_db_pg:/dbt
+      - ~/.dbt:/root
+    depends_on:
+      - elt_script
+    environment:
+      DBT_PROFILE: default
+      DBT_TARGET: dev
+
+networks:
+  elt_network:
+    driver: bridge
+
+volumes:
+  destination_db_data:
