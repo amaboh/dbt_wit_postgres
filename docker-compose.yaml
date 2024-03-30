@@ -26,8 +26,8 @@ services:
       POSTGRES_DB: destination_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: secret
-    # volumes:
-    #   - destination_db_data:/var/lib/postgresql/data
+    volumes:
+      - destination_db_data:/var/lib/postgresql/data
 
   elt_script:
     build:
